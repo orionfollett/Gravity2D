@@ -1,10 +1,32 @@
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
 #include <cmath>
+#include <map>
+#include <string>
 
 //for testing purposes
 #include <iostream>
 #include <chrono>
+
+class UI {
+
+public:
+	//InputMapping
+	enum InputAction {
+		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDPLANET
+	};
+
+	std::map<InputAction, olc::Key> inputMap;
+
+	UI() {
+		//default input values: (in future read from file)
+		inputMap[ZOOMIN] = olc::X;
+		inputMap[ZOOMOUT] = olc::SHIFT;
+		inputMap[PAUSESIM] = olc::SPACE;
+		inputMap[EXIT] = olc::ESCAPE;
+	}
+};
+
 
 class Vec2D {
 public:
@@ -111,8 +133,6 @@ public:
 	}
 
 	static void InitBodies(Body2D b[]) {
-
-		
 		//sun, earth, moon
 		b[0] = Body2D(750, 400, 0, 150, 0, 0, 1, 9, olc::BLUE);
 		b[1] = Body2D(400, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW);
@@ -125,9 +145,6 @@ public:
 		b[6] = Body2D(750 - 1000, 400, 0, 150, 0, 0, 1, 9, olc::BLUE);
 		b[7] = Body2D(400 - 1000, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW);
 		b[8] = Body2D(790 - 1000, 400, 0, 100, 0, 0, .01, 3, olc::GREY);
-
-
-
 
 		/*
 		//collision
@@ -232,6 +249,8 @@ public:
 	const int L_CLICK = 0;
 	const int R_CLICK = 1;
 	const int M_CLICK = 2;
+
+	UI IO = UI();
 	
 
 	bool OnUserCreate() override
@@ -245,7 +264,7 @@ public:
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 		//pause
-		if (GetKey(olc::SPACE).bPressed) {
+		if (GetKey(IO.inputMap[UI::PAUSESIM]).bPressed) {
 			pause = !pause;
 		}
 
@@ -274,7 +293,7 @@ public:
 		DrawBodies(b);
 
 		//quit program
-		if (GetKey(olc::ESCAPE).bPressed) {
+		if (GetKey(IO.inputMap[UI::EXIT]).bPressed) {
 			return false;
 		}
 
@@ -345,10 +364,10 @@ public:
 	}
 
 	void ZoomCamera(float fElapsedTime) {
-		if (GetKey(olc::I).bHeld) {
+		if (GetKey(IO.inputMap[UI::ZOOMIN]).bHeld) {
 			zoomVel = zoomVelConstant;
 		}
-		else if (GetKey(olc::O).bHeld) {
+		else if (GetKey(IO.inputMap[UI::ZOOMOUT]).bHeld) {
 			zoomVel = -1 * zoomVelConstant;
 		}
 		else {
@@ -368,6 +387,9 @@ int main()
 
 	g.OnUserDestroy();
 
+	//add some items to the map
+	
+
 	return 0;
 }
 
@@ -376,7 +398,6 @@ int main()
 //PANNING - done, can change so its mouse drag that pans around universe
 //PLANETS COMBINE MASS WHEN THEY COLLIDE - done
 //PAUSING - done, can add pause menu
-
 
 //PATH TRACING
 //ADD PLANETS ON THE FLY, CLICK, PROMPT POPS UP, TYPE MASS, SO ON, AND PLANET APPEARS
