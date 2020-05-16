@@ -23,8 +23,14 @@ public:
 		inputMap[ZOOMIN] = olc::X;
 		inputMap[ZOOMOUT] = olc::SHIFT;
 		inputMap[PAUSESIM] = olc::SPACE;
-		inputMap[EXIT] = olc::ESCAPE;
+		inputMap[EXIT] = olc::END;
+		inputMap[PAUSEMENU] = olc::ESCAPE;
 	}
+
+
+
+
+
 };
 
 
@@ -251,12 +257,20 @@ public:
 	const int M_CLICK = 2;
 
 	UI IO = UI();
+
+	olc::Sprite* pausedSprite = nullptr;
+	olc::Decal* pausedDecal = nullptr;
+
+
 	
 
 	bool OnUserCreate() override
 	{
 		// Called once at the start, so create things here
 		Body2D::InitBodies(b);
+
+		pausedSprite = new olc::Sprite("../Assets/paused.png");
+		pausedDecal = new olc::Decal(pausedSprite);
 
 		return true;
 	}
@@ -282,12 +296,17 @@ public:
 		}
 
 		//doesnt get called if paused
-		if (GetFPS() >= 10 && !pause) {
-			//UPDATE
-			//update gravity also handles planet collisions
-			Body2D::UpdateGravity(b);
-			Body2D::UpdateVelandPos(b, fElapsedTime);
-		}//end pause if
+		if (GetFPS() >= 10) {
+			if (!pause) {
+				//UPDATE
+				//update gravity also handles planet collisions
+				Body2D::UpdateGravity(b);
+				Body2D::UpdateVelandPos(b, fElapsedTime);
+			}//end pause if
+			else {
+				DrawSprite(0, 0, pausedSprite);
+			}
+		}
 
 		//DRAW
 		DrawBodies(b);
@@ -376,7 +395,6 @@ public:
 
 		zoomFactor *= ((zoomVel * fElapsedTime) + 1);
 	}
-
 };
 
 int main()
@@ -386,10 +404,7 @@ int main()
 		g.Start();
 
 	g.OnUserDestroy();
-
 	//add some items to the map
-	
-
 	return 0;
 }
 
@@ -416,6 +431,8 @@ int main()
 
 //space to pause
 
+
+//SWITCH FROM DRAWING PIXEL CIRCLES TO DRAWING DECALS WITH DIFFERENT COLORS AND DIFFERENT SIZES FOR PLANETS AND STARS, WILL INCREASE PERFORMANCE SIGNIFICANTLY
 
 //lock cursor
 /*
