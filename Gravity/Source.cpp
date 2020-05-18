@@ -3,7 +3,7 @@
 #include <cmath>
 #include <map>
 #include <string>
-
+#include <vector>
 //for testing purposes
 #include <iostream>
 #include <chrono>
@@ -13,7 +13,7 @@ class UI {
 public:
 	//InputMapping
 	enum InputAction {
-		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDPLANET
+		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDBODY, DELETEBODY
 	};
 
 	std::map<InputAction, olc::Key> inputMap;
@@ -25,11 +25,12 @@ public:
 		inputMap[PAUSESIM] = olc::SPACE;
 		inputMap[EXIT] = olc::END;
 		inputMap[PAUSEMENU] = olc::ESCAPE;
+		inputMap[ADDBODY] = olc::E;
+		inputMap[DELETEBODY] = olc::D;
 	}
 
-
-
-
+	//save controls function
+	//load controls function
 
 };
 
@@ -91,7 +92,8 @@ public:
 	static const int STAR_ENLARGEMENT_FACTOR = 10; //multiply star radius by this number to make star visible
 	static const int PLANET_ENLARGEMENT_FACTOR = 20; // same as above but for planets
 
-	static const int numBodies = 9;
+	//static const int numBodies = 9;
+	
 
 	//Vector velocity
 	//acceleration
@@ -129,8 +131,11 @@ public:
 		}
 	}
 
-	static void UpdateVelandPos(Body2D b[], float fElapsedTime) {
-		int len = numBodies;
+
+	//STATIC FUNCTIONS
+
+	static void UpdateVelandPos(std::vector<Body2D> &b, float fElapsedTime) {
+		int len = b.size();
 
 		for (int counter = 0; counter < len; counter++) {
 			b[counter].UpdateVel(fElapsedTime);
@@ -138,19 +143,22 @@ public:
 		}
 	}
 
-	static void InitBodies(Body2D b[]) {
+	static void InitBodies(std::vector<Body2D> &b) {
 		//sun, earth, moon
-		b[0] = Body2D(750, 400, 0, 150, 0, 0, 1, 9, olc::BLUE);
-		b[1] = Body2D(400, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW);
-		b[2] = Body2D(790, 400, 0, 100, 0, 0, .01, 3, olc::GREY);
+		b.push_back(Body2D(750, 400, 0, 150, 0, 0, 1, 9, olc::BLUE));
+		b.push_back(Body2D(400, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW));
+		b.push_back(Body2D(790, 400, 0, 100, 0, 0, .01, 3, olc::GREY));
 		
-		b[3] = Body2D(750 + 1000, 400, 0, 150, 0, 0, 1, 9, olc::BLUE);
-		b[4] = Body2D(400 + 1000, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW);
-		b[5] = Body2D(790 + 1000, 400, 0, 100, 0, 0, .01, 3, olc::GREY);
+		/*
+		b.push_back(Body2D(750 + 1000, 400, 0, 150, 0, 0, 1, 9, olc::BLUE));
+		b.push_back(Body2D(400 + 1000, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW));
+		b.push_back(Body2D(790 + 1000, 400, 0, 100, 0, 0, .01, 3, olc::GREY));
 
-		b[6] = Body2D(750 - 1000, 400, 0, 150, 0, 0, 1, 9, olc::BLUE);
-		b[7] = Body2D(400 - 1000, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW);
-		b[8] = Body2D(790 - 1000, 400, 0, 100, 0, 0, .01, 3, olc::GREY);
+		b.push_back(Body2D(750 - 1000, 400, 0, 150, 0, 0, 1, 9, olc::BLUE));
+		b.push_back(Body2D(400 - 1000, 400, 0, 0, 0, 0, 100, 35, olc::YELLOW));
+		b.push_back(Body2D(790 - 1000, 400, 0, 100, 0, 0, .01, 3, olc::GREY));
+
+		*/
 
 		/*
 		//collision
@@ -164,9 +172,9 @@ public:
 	}
 
 	//Updates gravity on all the objects, and resolves collisions
-	static void UpdateGravity(Body2D b[]) {
+	static void UpdateGravity(std::vector<Body2D> &b) {
 		
-		const int len = numBodies;
+		int len = b.size();
 
 		for (int counter = 0; counter < len; counter++) {
 			b[counter].acc.x = 0;
@@ -195,11 +203,26 @@ public:
 						ResolveCollision(b, in, out);
 					}
 				}
+				if (!b[in].active) {
+					Body2D temp = b[b.size() - 1];
+					b[b.size() - 1] = b[in];
+					b[in] = temp;
+					b.resize(b.size() - 1);
+					len = b.size();
+				}
+			}
+
+			if (!b[out].active) {
+				Body2D temp = b[b.size() - 1];
+				b[b.size() - 1] = b[out];
+				b[out] = temp;
+				b.resize(b.size() - 1);
+				len = b.size();
 			}
 		}
 	}
 
-	static void ResolveCollision(Body2D b[],int i1, int i2) {
+	static void ResolveCollision(std::vector<Body2D> &b,int i1, int i2) {
 		int index = 0;
 		int toBeDeactivated = 0;
 		if (b[i1].mass > b[i2].mass) {
@@ -219,6 +242,26 @@ public:
 		b[index].mass += b[toBeDeactivated].mass;
 		b[toBeDeactivated].active = false;
 	}
+
+	static void AddBodyAt(std::vector<Body2D> &b, Vec2D pos) {
+		b.push_back(Body2D(pos.x, pos.y, 0, 0, 0, 0, 1, 10, olc::GREEN));
+	}
+
+	static void DeleteBodyAt(std::vector<Body2D> &b, Vec2D mousePos) {
+		for (int counter = 0; counter < b.size(); counter++) {
+			if (Vec2D::VectorDistanceSquared(mousePos, b[counter].pos) < (b[counter].radius * b[counter].radius)) {
+				b[counter].active = false;
+			}
+		}
+	}
+
+	static void AddMassAt(std::vector<Body2D> &b, Vec2D mousePos) {
+		for (int counter = 0; counter < b.size(); counter++) {
+			if (Vec2D::VectorDistanceSquared(mousePos, b[counter].pos) < (b[counter].radius * b[counter].radius)) {
+				b[counter].mass += 10;
+			}
+		}
+	}
 };
 
 class Graphics : public olc::PixelGameEngine
@@ -234,8 +277,9 @@ public:
 	float time = 0.0;
 	float nSec = 1;
 
-	Body2D b[Body2D::numBodies];
-	
+	//Body2D b[Body2D::numBodies];
+	std::vector<Body2D> b;
+
 	bool pause = false;
 	
 	//WASD panning coordinates
@@ -262,13 +306,11 @@ public:
 	olc::Decal* pausedDecal = nullptr;
 
 
-	
-
 	bool OnUserCreate() override
 	{
 		// Called once at the start, so create things here
 		Body2D::InitBodies(b);
-
+		
 		pausedSprite = new olc::Sprite("../Assets/paused.png");
 		pausedDecal = new olc::Decal(pausedSprite);
 
@@ -296,10 +338,14 @@ public:
 		}
 
 		//doesnt get called if paused
-		if (GetFPS() >= 10) {
+		if (GetFPS() >= 1) {
 			if (!pause) {
+
+				//INPUT
+				EditObjects(b);
+
 				//UPDATE
-				//update gravity also handles planet collisions
+				//update gravity also handles planet collisions as distances are all calculated
 				Body2D::UpdateGravity(b);
 				Body2D::UpdateVelandPos(b, fElapsedTime);
 			}//end pause if
@@ -322,12 +368,12 @@ public:
 	void DrawBody(Body2D b) {
 		if (b.active) {
 			FillCircle((b.pos.x * zoomFactor) + worldCenter.x, (b.pos.y * zoomFactor) + worldCenter.y, b.radius * zoomFactor, b.color);
-		}		
+		}
 	}
 
-	void DrawBodies(Body2D b[]) {
+	void DrawBodies(std::vector<Body2D> b) {
 		//int len = sizeof(b) -1;
-		int len = Body2D::numBodies;
+		int len = b.size();
 
 		for (int counter = 0; counter < len; counter++) {
 			DrawBody(b[counter]);
@@ -337,7 +383,6 @@ public:
 	void PanCamera(float fElapsedTime) {
 
 		//Mouse way for camera panning, click and drag
-		
 		if (GetMouse(R_CLICK).bHeld && !isDragging) {
 			originalMousePanPos = Vec2D(GetMouseX(), GetMouseY());
 			isDragging = true;
@@ -395,6 +440,20 @@ public:
 
 		zoomFactor *= ((zoomVel * fElapsedTime) + 1);
 	}
+
+	//collects various input that will add, delete, add or subtract mass, or move planets
+	void EditObjects(std::vector<Body2D> &b) {
+		//add body
+		if (GetKey(IO.inputMap[UI::ADDBODY]).bHeld && GetMouse(L_CLICK).bPressed) {
+			Body2D::AddBodyAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+		}
+		else if (GetKey(IO.inputMap[UI::DELETEBODY]).bHeld && GetMouse(L_CLICK).bPressed) {
+			Body2D::DeleteBodyAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+		}
+		else if(GetMouse(L_CLICK).bPressed) {
+			Body2D::AddMassAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+		}
+	}
 };
 
 int main()
@@ -404,7 +463,7 @@ int main()
 		g.Start();
 
 	g.OnUserDestroy();
-	//add some items to the map
+
 	return 0;
 }
 
@@ -420,16 +479,16 @@ int main()
 //LIGHT SOURCES
 
 //UI IDEAS
-//click and drag to pan around, scoll to zoom.
-//shift click to add planet at rest, clicking and holding to drag on planet to "throw" it, 
+//click and drag to pan around, shift and x to zoom
+//E + click to add planet at rest, clicking and holding to drag on planet to "throw" it, 
 //gives it an impulse, use momentum to resolve impulse
 //need way to give planet mass...maybe just a short click on a planet will add mass, so keep clicking on planet to increase mass
-//need way to delete planet...
+//D+click deletes planet
 //need UI so when you click on planet it gives its radius and mass and coordinates in world space, 
 //think more about scale of world, 
 //add UI Pause menu with above controls listed
 
-//space to pause
+//space to pause simulation , but doesnt go to pause menu, allows freezing time
 
 
 //SWITCH FROM DRAWING PIXEL CIRCLES TO DRAWING DECALS WITH DIFFERENT COLORS AND DIFFERENT SIZES FOR PLANETS AND STARS, WILL INCREASE PERFORMANCE SIGNIFICANTLY
