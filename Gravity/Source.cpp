@@ -73,6 +73,38 @@ public:
 		return (this->sinAngleBetween(v2) / this->cosAngleBetween(v2));
 	}
 
+	void normalize() {
+
+		float mag = this->mag();
+
+		this->x /= mag;
+		this->y /= mag;
+	}
+
+	//multiplies vector by a scalar
+	void scale(float sFactor) {
+		this->x *= sFactor;
+		this->y *= sFactor;
+	}
+
+	//returns square of magnitude of the vector
+	float magSquared() {
+		return ((this->x * this->x) + (this->y * this->y));
+	}
+
+	//clamps magnitude of vec between min and max
+	void clamp(float min, float max) {
+		if (this->mag() < min) {
+			this->normalize();
+			this->scale(min);
+		}
+		else if (this->mag() > max) {
+			this->normalize();
+			this->scale(max);
+		}
+			
+	}
+
 	//Static functions
 	//adds two vectors using vector addition
 	static Vec2D VectorAdd(Vec2D v1, Vec2D v2) {
@@ -251,6 +283,11 @@ public:
 		for (int counter = 0; counter < b.size(); counter++) {
 			if (Vec2D::VectorDistanceSquared(mousePos, b[counter].pos) < (b[counter].radius * b[counter].radius)) {
 				b[counter].active = false;
+
+				Body2D temp = b[b.size() - 1];
+				b[b.size() - 1] = b[counter];
+				b[counter] = temp;
+				b.resize(b.size() - 1);
 			}
 		}
 	}
@@ -281,7 +318,7 @@ public:
 	std::vector<Body2D> b;
 
 	bool pause = false;
-	
+
 	//WASD panning coordinates
 	Vec2D worldCenter = Vec2D(0, 0);
 	Vec2D worldCenterVel = Vec2D(0, 0);
@@ -310,7 +347,7 @@ public:
 	{
 		// Called once at the start, so create things here
 		Body2D::InitBodies(b);
-		
+
 		pausedSprite = new olc::Sprite("../Assets/paused.png");
 		pausedDecal = new olc::Decal(pausedSprite);
 
@@ -331,18 +368,18 @@ public:
 		PanCamera(fElapsedTime);
 		ZoomCamera(fElapsedTime);
 
+		//INPUT
+		EditObjects(b);
+
 		//print debug values every second
 		if (time > nSec) {
 			nSec += 1;
-			std::cout <<  " " << nSec << " seconds.\n";
+			std::cout << " " << nSec << " seconds.\n";
 		}
 
 		//doesnt get called if paused
 		if (GetFPS() >= 1) {
 			if (!pause) {
-
-				//INPUT
-				EditObjects(b);
 
 				//UPDATE
 				//update gravity also handles planet collisions as distances are all calculated
@@ -356,6 +393,7 @@ public:
 
 		//DRAW
 		DrawBodies(b);
+		DrawBodyVelAndAccVectors(b);
 
 		//quit program
 		if (GetKey(IO.inputMap[UI::EXIT]).bPressed) {
@@ -377,6 +415,28 @@ public:
 
 		for (int counter = 0; counter < len; counter++) {
 			DrawBody(b[counter]);
+		}
+	}
+
+	void DrawBodyVelAndAccVectors(std::vector<Body2D> b) {
+		
+		//at min draw arrow length 1, max length 50
+		int min = 50;
+		int max = 100000;
+
+		for (int counter = 0; counter < b.size(); counter++) {
+
+			Vec2D vel = Vec2D(b[counter].vel.x, b[counter].vel.y *-1);
+			vel.clamp(min, max);
+			vel = Vec2D::VectorAdd(vel, b[counter].pos);
+
+
+			Vec2D acc = Vec2D(b[counter].acc.x, b[counter].acc.y * -1);
+			acc.clamp(min, max);
+			acc = Vec2D::VectorAdd(acc, b[counter].pos);
+			
+			DrawVector(b[counter].pos, vel, olc::RED);
+			DrawVector(b[counter].pos, acc, olc::GREEN);
 		}
 	}
 
@@ -454,10 +514,36 @@ public:
 			Body2D::AddMassAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
 		}
 	}
+
+	void DrawVector(Vec2D origin, Vec2D end, olc::Pixel color = olc::WHITE) {
+		//center line
+		DrawLine(origin.x + worldCenter.x, origin.y + worldCenter.y, end.x + worldCenter.x, end.y + worldCenter.y, color);
+
+		//draw arrowheads
+		float angleForArrowHeads = 30 * (3.141596 / 180.0);
+		float magForArrowHeads = 20;
+
+		float angleBetween = origin.angleBetween(end);
+		float theta1 = angleBetween + angleForArrowHeads;
+
+		float theta2 = angleBetween - angleForArrowHeads;
+
+		DrawLine(end.x + worldCenter.x, end.y + worldCenter.y, end.x - magForArrowHeads*sin(theta1) + worldCenter.x, end.y - magForArrowHeads*cos(theta1) + worldCenter.y, color);
+		DrawLine(end.x + worldCenter.x, end.y + worldCenter.y, end.x - magForArrowHeads * sin(theta2) + worldCenter.x, end.y - magForArrowHeads * cos(theta2) + worldCenter.y, color);
+	}
 };
 
 int main()
 {
+	/*
+	Vec2D vec = Vec2D(100, 50);
+	std::cout << vec.mag() << "\n";
+
+	vec.clamp(1, 10);
+	std::cout << vec.x << " " << vec.y << " " << vec.mag();
+	*/
+	//while (1) {}
+
 	Graphics g;
 	if (g.Construct(900, 900, 1, 1))
 		g.Start();
