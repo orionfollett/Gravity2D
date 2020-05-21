@@ -13,7 +13,7 @@ class UI {
 public:
 	//InputMapping
 	enum InputAction {
-		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDBODY, DELETEBODY
+		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDBODY, DELETEBODY, ADDMASS, TOGGLEVECTORS
 	};
 
 	std::map<InputAction, olc::Key> inputMap;
@@ -27,6 +27,8 @@ public:
 		inputMap[PAUSEMENU] = olc::ESCAPE;
 		inputMap[ADDBODY] = olc::E;
 		inputMap[DELETEBODY] = olc::D;
+		inputMap[TOGGLEVECTORS] = olc::V;
+		inputMap[ADDMASS] = olc::A;
 	}
 
 	//save controls function
@@ -94,11 +96,11 @@ public:
 
 	//clamps magnitude of vec between min and max
 	void clamp(float min, float max) {
-		if (this->mag() < min) {
+		if (this->magSquared() < (min*min)) {
 			this->normalize();
 			this->scale(min);
 		}
-		else if (this->mag() > max) {
+		else if (this->magSquared() > (max*max)) {
 			this->normalize();
 			this->scale(max);
 		}
@@ -270,6 +272,10 @@ public:
 		b[index].vel.x = ((b[i1].mass * b[i1].vel.x) + (b[i2].mass * b[i2].vel.x)) / (b[i1].mass + b[i2].mass);
 		b[index].vel.y = ((b[i1].mass * b[i1].vel.y) + (b[i2].mass * b[i2].vel.y)) / (b[i1].mass + b[i2].mass);
 		
+
+		//set radius of new planet/star
+		b[index].radius = sqrt((b[index].radius * b[index].radius) + (b[toBeDeactivated].radius * b[toBeDeactivated].radius));
+
 		//set mass to sum and deactivate other planet.
 		b[index].mass += b[toBeDeactivated].mass;
 		b[toBeDeactivated].active = false;
@@ -277,6 +283,7 @@ public:
 
 	static void AddBodyAt(std::vector<Body2D> &b, Vec2D pos) {
 		b.push_back(Body2D(pos.x, pos.y, 0, 0, 0, 0, 1, 10, olc::GREEN));
+		//UpdateGravity(b);
 	}
 
 	static void DeleteBodyAt(std::vector<Body2D> &b, Vec2D mousePos) {
@@ -318,6 +325,7 @@ public:
 	std::vector<Body2D> b;
 
 	bool pause = false;
+	bool toggleVectors = true;
 
 	//WASD panning coordinates
 	Vec2D worldCenter = Vec2D(0, 0);
@@ -361,6 +369,10 @@ public:
 			pause = !pause;
 		}
 
+		if (GetKey(IO.inputMap[UI::TOGGLEVECTORS]).bPressed) {
+			toggleVectors = !toggleVectors;
+		}
+
 		// called once per frame
 		Clear(olc::Pixel(0, 0, 0));
 		time += fElapsedTime;
@@ -377,13 +389,15 @@ public:
 			std::cout << " " << nSec << " seconds.\n";
 		}
 
+		//UPDATE GRAVITY- GETS CALLED TO UPDATE VECTORS EVEN WHEN PAUSED
+		//update gravity also handles planet collisions as distances are all calculated
+		Body2D::UpdateGravity(b);
+
 		//doesnt get called if paused
 		if (GetFPS() >= 1) {
 			if (!pause) {
 
-				//UPDATE
-				//update gravity also handles planet collisions as distances are all calculated
-				Body2D::UpdateGravity(b);
+				//UPDATE POS AND VEL
 				Body2D::UpdateVelandPos(b, fElapsedTime);
 			}//end pause if
 			else {
@@ -393,8 +407,10 @@ public:
 
 		//DRAW
 		DrawBodies(b);
-		DrawBodyVelAndAccVectors(b);
-
+		if (toggleVectors) {
+			DrawBodyVelAndAccVectors(b);
+		}
+		
 		//quit program
 		if (GetKey(IO.inputMap[UI::EXIT]).bPressed) {
 			return false;
@@ -422,7 +438,7 @@ public:
 		
 		//at min draw arrow length 1, max length 50
 		int min = 50;
-		int max = 100000;
+		int max = 150;
 
 		for (int counter = 0; counter < b.size(); counter++) {
 
@@ -505,31 +521,41 @@ public:
 	void EditObjects(std::vector<Body2D> &b) {
 		//add body
 		if (GetKey(IO.inputMap[UI::ADDBODY]).bHeld && GetMouse(L_CLICK).bPressed) {
-			Body2D::AddBodyAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+			Body2D::AddBodyAt(b, Vec2D((GetMouseX() - worldCenter.x)/zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
 		}
 		else if (GetKey(IO.inputMap[UI::DELETEBODY]).bHeld && GetMouse(L_CLICK).bPressed) {
-			Body2D::DeleteBodyAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+			Body2D::DeleteBodyAt(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
 		}
-		else if(GetMouse(L_CLICK).bPressed) {
-			Body2D::AddMassAt(b, Vec2D(GetMouseX() - worldCenter.x, GetMouseY() - worldCenter.y));
+		else if(GetKey(IO.inputMap[UI::ADDMASS]).bHeld && GetMouse(L_CLICK).bPressed) {
+			Body2D::AddMassAt(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
 		}
 	}
 
 	void DrawVector(Vec2D origin, Vec2D end, olc::Pixel color = olc::WHITE) {
 		//center line
-		DrawLine(origin.x + worldCenter.x, origin.y + worldCenter.y, end.x + worldCenter.x, end.y + worldCenter.y, color);
+		DrawLine((origin.x * zoomFactor) + worldCenter.x, (origin.y * zoomFactor) + worldCenter.y, (end.x*zoomFactor) + worldCenter.x, (end.y*zoomFactor) + worldCenter.y, color);
 
 		//draw arrowheads
 		float angleForArrowHeads = 30 * (3.141596 / 180.0);
 		float magForArrowHeads = 20;
+
+		float lenSquared = Vec2D(origin.x - end.x, origin.y - end.y).magSquared();
+
+		magForArrowHeads = lenSquared / 100;
+		if (magForArrowHeads > 20) {
+			magForArrowHeads = 20;
+		}
+		else if(lenSquared < 15){
+			magForArrowHeads = .1;
+		}
 
 		float angleBetween = origin.angleBetween(end);
 		float theta1 = angleBetween + angleForArrowHeads;
 
 		float theta2 = angleBetween - angleForArrowHeads;
 
-		DrawLine(end.x + worldCenter.x, end.y + worldCenter.y, end.x - magForArrowHeads*sin(theta1) + worldCenter.x, end.y - magForArrowHeads*cos(theta1) + worldCenter.y, color);
-		DrawLine(end.x + worldCenter.x, end.y + worldCenter.y, end.x - magForArrowHeads * sin(theta2) + worldCenter.x, end.y - magForArrowHeads * cos(theta2) + worldCenter.y, color);
+		DrawLine((end.x*zoomFactor) + worldCenter.x, (end.y*zoomFactor) + worldCenter.y, (end.x - magForArrowHeads*sin(theta1))*zoomFactor + worldCenter.x, (end.y - magForArrowHeads*cos(theta1))*zoomFactor + worldCenter.y, color);
+		DrawLine((end.x*zoomFactor) + worldCenter.x, (end.y*zoomFactor) + worldCenter.y, (end.x - magForArrowHeads * sin(theta2))*zoomFactor + worldCenter.x, (end.y - magForArrowHeads * cos(theta2))*zoomFactor + worldCenter.y, color);
 	}
 };
 
@@ -578,6 +604,8 @@ int main()
 
 
 //SWITCH FROM DRAWING PIXEL CIRCLES TO DRAWING DECALS WITH DIFFERENT COLORS AND DIFFERENT SIZES FOR PLANETS AND STARS, WILL INCREASE PERFORMANCE SIGNIFICANTLY
+//DRAG VECTORS TO GIVE PLANETS INITIAL VELOCITY
+//INCREASE SIZE OF PLANETS THAT SWALLOW OTHER PLANETS
 
 //lock cursor
 /*
