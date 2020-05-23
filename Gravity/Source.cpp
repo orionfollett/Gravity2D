@@ -13,7 +13,7 @@ class UI {
 public:
 	//InputMapping
 	enum InputAction {
-		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDBODY, DELETEBODY, ADDMASS, TOGGLEVECTORS
+		ZOOMIN, ZOOMOUT, PAUSEMENU, PAUSESIM, EXIT, ADDBODY, DELETEBODY, ADDMASS, TOGGLEVECTORS, TOGGLECENTER
 	};
 
 	std::map<InputAction, olc::Key> inputMap;
@@ -29,6 +29,7 @@ public:
 		inputMap[DELETEBODY] = olc::D;
 		inputMap[TOGGLEVECTORS] = olc::V;
 		inputMap[ADDMASS] = olc::A;
+		inputMap[TOGGLECENTER] = olc::C;
 	}
 
 	//save controls function
@@ -138,6 +139,11 @@ public:
 	int mass, radius;
 	Vec2D pos, vel, acc;
 	olc::Pixel color;
+
+	Vec2D velDrawArrowEnd;
+	Vec2D firstMousePos;
+
+	bool toggleAsCenter = false;
 
 	Body2D(float xPos, float yPos, float xVel, float yVel, float xAcc, float yAcc, int m, int r, olc::Pixel colorPixel) {
 		pos = Vec2D(xPos, yPos);
@@ -306,6 +312,15 @@ public:
 			}
 		}
 	}
+
+	static void ToggleCenterPlanet(std::vector<Body2D> &b, Vec2D mousePos) {
+		for (int counter = 0; counter < b.size(); counter++) {
+			b[counter].toggleAsCenter = false;
+			if (Vec2D::VectorDistanceSquared(mousePos, b[counter].pos) < (b[counter].radius * b[counter].radius)) {
+				b[counter].toggleAsCenter = !b[counter].toggleAsCenter;
+			}
+		}
+	}
 };
 
 class Graphics : public olc::PixelGameEngine
@@ -394,7 +409,7 @@ public:
 		Body2D::UpdateGravity(b);
 
 		//doesnt get called if paused
-		if (GetFPS() >= 1) {
+		if (GetFPS() >= 20) {
 			if (!pause) {
 
 				//UPDATE POS AND VEL
@@ -430,11 +445,17 @@ public:
 		int len = b.size();
 
 		for (int counter = 0; counter < len; counter++) {
+
+			if (b[counter].toggleAsCenter && !isDragging) {
+				worldCenter.x = b[counter].pos.x - (ScreenWidth() / 2);
+				worldCenter.y = b[counter].pos.y - (ScreenHeight() / 2);
+			}
+
 			DrawBody(b[counter]);
 		}
 	}
 
-	void DrawBodyVelAndAccVectors(std::vector<Body2D> b) {
+	void DrawBodyVelAndAccVectors(std::vector<Body2D> &b) {
 		
 		//at min draw arrow length 1, max length 50
 		int min = 50;
@@ -450,6 +471,8 @@ public:
 			Vec2D acc = Vec2D(b[counter].acc.x, b[counter].acc.y * -1);
 			acc.clamp(min, max);
 			acc = Vec2D::VectorAdd(acc, b[counter].pos);
+
+			b[counter].velDrawArrowEnd = Vec2D(vel.x, vel.y);
 			
 			DrawVector(b[counter].pos, vel, olc::RED);
 			DrawVector(b[counter].pos, acc, olc::GREEN);
@@ -529,6 +552,16 @@ public:
 		else if(GetKey(IO.inputMap[UI::ADDMASS]).bHeld && GetMouse(L_CLICK).bPressed) {
 			Body2D::AddMassAt(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
 		}
+		else if (GetKey(IO.inputMap[UI::TOGGLECENTER]).bHeld && GetMouse(L_CLICK).bPressed) {
+			Body2D::ToggleCenterPlanet(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
+		}
+		else{
+			DragVectors(b, 20);
+		}
+
+		if (GetMouse(L_CLICK).bPressed) {
+			std::cout << "L CLICK\n";
+		}
 	}
 
 	void DrawVector(Vec2D origin, Vec2D end, olc::Pixel color = olc::WHITE) {
@@ -557,6 +590,56 @@ public:
 		DrawLine((end.x*zoomFactor) + worldCenter.x, (end.y*zoomFactor) + worldCenter.y, (end.x - magForArrowHeads*sin(theta1))*zoomFactor + worldCenter.x, (end.y - magForArrowHeads*cos(theta1))*zoomFactor + worldCenter.y, color);
 		DrawLine((end.x*zoomFactor) + worldCenter.x, (end.y*zoomFactor) + worldCenter.y, (end.x - magForArrowHeads * sin(theta2))*zoomFactor + worldCenter.x, (end.y - magForArrowHeads * cos(theta2))*zoomFactor + worldCenter.y, color);
 	}
+
+	//allows user to click and drag on velocity vectors
+	void DragVectors(std::vector<Body2D> &b, float buttonRadius) {
+		//each vector needs a collision circle
+		//click and drag on vectors
+		//exclusive action, so if u click and are holding E, nothing should happen?
+		//this function will be called in edit objects
+
+
+		
+
+		if (GetMouse(L_CLICK).bHeld) {
+			
+
+			Vec2D mousePos = Vec2D(GetMouseX(), GetMouseY());
+
+			//search through all vector collision circles
+			for (int counter = 0; counter < b.size(); counter++) {
+
+				float distSquared = Vec2D::VectorDistanceSquared(mousePos, b[counter].velDrawArrowEnd);
+				
+
+				if (distSquared < (buttonRadius * buttonRadius)) {
+					
+
+					if (GetMouse(L_CLICK).bPressed) {
+						b[counter].firstMousePos = Vec2D(GetMouseX(), GetMouseY());
+					}
+
+					Vec2D newMousePos = Vec2D(GetMouseX(), GetMouseY());
+					DrawCircle(b[counter].velDrawArrowEnd.x, b[counter].velDrawArrowEnd.y, 20);
+					b[counter].velDrawArrowEnd = newMousePos;
+
+					//drag vector
+					if (GetMouse(L_CLICK).bReleased) {
+						
+						//b[counter].vel.x *= ((GetMouseX() - b[counter].firstMousePos.x) / b[counter].vel.x - );
+						//b[counter].vel.y *= (GetMouseY() - b[counter].firstMousePos.y);
+
+					}
+
+					std::cout << "vector clicked\n";
+
+				}
+			}
+
+		}
+
+	}
+
 };
 
 int main()
