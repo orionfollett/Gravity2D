@@ -141,7 +141,6 @@ public:
 	olc::Pixel color;
 
 	Vec2D velDrawArrowEnd;
-	Vec2D firstMousePos;
 
 	bool toggleAsCenter = false;
 
@@ -315,9 +314,11 @@ public:
 
 	static void ToggleCenterPlanet(std::vector<Body2D> &b, Vec2D mousePos) {
 		for (int counter = 0; counter < b.size(); counter++) {
-			b[counter].toggleAsCenter = false;
 			if (Vec2D::VectorDistanceSquared(mousePos, b[counter].pos) < (b[counter].radius * b[counter].radius)) {
 				b[counter].toggleAsCenter = !b[counter].toggleAsCenter;
+			}
+			else {
+				b[counter].toggleAsCenter = false;
 			}
 		}
 	}
@@ -333,37 +334,49 @@ public:
 
 public:
 	//variables AAA
-	float time = 0.0;
-	float nSec = 1;
+	float time = 0.0; //time in ms
+	float nSec = 1;//number of seconds program has run
 
 	//Body2D b[Body2D::numBodies];
 	std::vector<Body2D> b;
 
-	bool pause = false;
-	bool toggleVectors = true;
+	//toggle variables
+	bool pause = false; //paused or not
+	bool toggleVectors = true; //draw vel and acc vectors or not
 
 	//WASD panning coordinates
 	Vec2D worldCenter = Vec2D(0, 0);
 	Vec2D worldCenterVel = Vec2D(0, 0);
 	float worldVel = 200;
+
 	//mouse extra panning coordinates
-	Vec2D originalMousePanPos = Vec2D(0, 0);
-	bool isDragging = false;
+	Vec2D originalMousePanPos = Vec2D(0, 0); //used to store original mouse pos for panning camera
+	bool isDragging = false; //very important variable that determines if camera is in process of moving
+
+	//vector dragging
+	int vectorDraggingIndex = -1;
+
+	//vectorScale is scale vector factor - later add realism or sense of scale to this
+	float vectorScale = 1 / 2.0;
 
 	//zooming numbers
 	float zoomFactor = 1.0;
 	float zoomVel = 0;
 	float zoomVelConstant = .3;
 
-	//mouse constants
+	//mouse constants - need to be dynamically figured out, only works for specific mouse
 	const int L_CLICK = 0;
 	const int R_CLICK = 1;
 	const int M_CLICK = 2;
 
-	UI IO = UI();
+	
+	UI IO = UI(); //carrier for all input things, will allow for changing controls in game by changing this 
 
+	//sprite and decal for paused menu
 	olc::Sprite* pausedSprite = nullptr;
 	olc::Decal* pausedDecal = nullptr;
+
+
 
 
 	bool OnUserCreate() override
@@ -392,6 +405,8 @@ public:
 		Clear(olc::Pixel(0, 0, 0));
 		time += fElapsedTime;
 
+		
+		//pan and zoom camera
 		PanCamera(fElapsedTime);
 		ZoomCamera(fElapsedTime);
 
@@ -422,10 +437,11 @@ public:
 
 		//DRAW
 		DrawBodies(b);
+
 		if (toggleVectors) {
 			DrawBodyVelAndAccVectors(b);
 		}
-		
+
 		//quit program
 		if (GetKey(IO.inputMap[UI::EXIT]).bPressed) {
 			return false;
@@ -440,15 +456,21 @@ public:
 		}
 	}
 
-	void DrawBodies(std::vector<Body2D> b) {
+	void DrawBodies(std::vector<Body2D>& b) {
 		//int len = sizeof(b) -1;
 		int len = b.size();
 
 		for (int counter = 0; counter < len; counter++) {
 
+			//make sure worldcenter is corrected if there is a planet that is supposed to be the center
 			if (b[counter].toggleAsCenter && !isDragging) {
-				worldCenter.x = b[counter].pos.x - (ScreenWidth() / 2);
-				worldCenter.y = b[counter].pos.y - (ScreenHeight() / 2);
+
+				worldCenter.x = (ScreenWidth() / 2) - b[counter].pos.x;
+				worldCenter.y = (ScreenHeight() / 2) - b[counter].pos.y;
+			}
+			//cancel center if camera if being panned
+			if (isDragging) {
+				b[counter].toggleAsCenter = false;
 			}
 
 			DrawBody(b[counter]);
@@ -458,23 +480,35 @@ public:
 	void DrawBodyVelAndAccVectors(std::vector<Body2D> &b) {
 		
 		//at min draw arrow length 1, max length 50
-		int min = 50;
-		int max = 150;
+		//int min = 0;
+		//int max = 1000000;
+		
+		//vectorScale is scale vector factor - later add realism or sense of scale to this
+		
 
 		for (int counter = 0; counter < b.size(); counter++) {
 
 			Vec2D vel = Vec2D(b[counter].vel.x, b[counter].vel.y *-1);
-			vel.clamp(min, max);
+			
+			//either clamp between two values which is irretrievable, or scale which is retrievable
+			//vel.clamp(min, max);
+			vel.scale(vectorScale);
+
 			vel = Vec2D::VectorAdd(vel, b[counter].pos);
 
 
 			Vec2D acc = Vec2D(b[counter].acc.x, b[counter].acc.y * -1);
-			acc.clamp(min, max);
+			//acc.clamp(min, max);
+			acc.scale(vectorScale);
+
 			acc = Vec2D::VectorAdd(acc, b[counter].pos);
 
-			b[counter].velDrawArrowEnd = Vec2D(vel.x, vel.y);
+			//only set velocity vector arrow if its not being changed
+			if (vectorDraggingIndex == -1) {
+				b[counter].velDrawArrowEnd = Vec2D(vel.x, vel.y);
+			}
 			
-			DrawVector(b[counter].pos, vel, olc::RED);
+			DrawVector(b[counter].pos, b[counter].velDrawArrowEnd, olc::RED);
 			DrawVector(b[counter].pos, acc, olc::GREEN);
 		}
 	}
@@ -555,12 +589,12 @@ public:
 		else if (GetKey(IO.inputMap[UI::TOGGLECENTER]).bHeld && GetMouse(L_CLICK).bPressed) {
 			Body2D::ToggleCenterPlanet(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor));
 		}
-		else{
-			DragVectors(b, 20);
+		else if(pause && toggleVectors){
+			DragVectors(b, Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor), 20);
 		}
 
 		if (GetMouse(L_CLICK).bPressed) {
-			std::cout << "L CLICK\n";
+			//std::cout << "L CLICK\n";
 		}
 	}
 
@@ -592,65 +626,72 @@ public:
 	}
 
 	//allows user to click and drag on velocity vectors
-	void DragVectors(std::vector<Body2D> &b, float buttonRadius) {
+	void DragVectors(std::vector<Body2D> &b, Vec2D mousePos, float buttonRadius) {
 		//each vector needs a collision circle
 		//click and drag on vectors
 		//exclusive action, so if u click and are holding E, nothing should happen?
 		//this function will be called in edit objects
 
-
-		
-
-		if (GetMouse(L_CLICK).bHeld) {
-			
-
-			Vec2D mousePos = Vec2D(GetMouseX(), GetMouseY());
+		//only gets called on first click
+		if (GetMouse(L_CLICK).bPressed) {
+			//figure out which vector to drag
 
 			//search through all vector collision circles
-			for (int counter = 0; counter < b.size(); counter++) {
-
-				float distSquared = Vec2D::VectorDistanceSquared(mousePos, b[counter].velDrawArrowEnd);
+			int len = b.size();
+			for (int counter = 0; counter < len; counter++) {
+				//circle point collision detection
+				if (Vec2D::VectorDistanceSquared(mousePos, b[counter].velDrawArrowEnd) < (buttonRadius * buttonRadius)) {
 				
 
-				if (distSquared < (buttonRadius * buttonRadius)) {
-					
-
-					if (GetMouse(L_CLICK).bPressed) {
-						b[counter].firstMousePos = Vec2D(GetMouseX(), GetMouseY());
-					}
-
-					Vec2D newMousePos = Vec2D(GetMouseX(), GetMouseY());
-					DrawCircle(b[counter].velDrawArrowEnd.x, b[counter].velDrawArrowEnd.y, 20);
-					b[counter].velDrawArrowEnd = newMousePos;
-
-					//drag vector
-					if (GetMouse(L_CLICK).bReleased) {
-						
-						//b[counter].vel.x *= ((GetMouseX() - b[counter].firstMousePos.x) / b[counter].vel.x - );
-						//b[counter].vel.y *= (GetMouseY() - b[counter].firstMousePos.y);
-
-					}
-
-					std::cout << "vector clicked\n";
-
+					//set vectorDragginIndex to body counter so that dont have to search everytime now
+					vectorDraggingIndex = counter;
 				}
 			}
-
 		}
 
+		if (vectorDraggingIndex != -1 && GetMouse(L_CLICK).bHeld) {
+			Vec2D newMousePos = Vec2D((GetMouseX() - worldCenter.x) / zoomFactor, (GetMouseY() - worldCenter.y) / zoomFactor);
+			b[vectorDraggingIndex].velDrawArrowEnd = newMousePos;
+
+			DrawCircle(b[vectorDraggingIndex].velDrawArrowEnd.x * zoomFactor + worldCenter.x, b[vectorDraggingIndex].velDrawArrowEnd.y * zoomFactor + worldCenter.y, buttonRadius);
+		}
+			
+		//drag vector
+		if (GetMouse(L_CLICK).bReleased && vectorDraggingIndex != -1) {
+
+			//calculate old veldrawarrowend based off velocity which doesnt change since this is only called when paused
+			Vec2D vel = Vec2D(b[vectorDraggingIndex].vel.x, b[vectorDraggingIndex].vel.y * -1);
+			vel.scale(vectorScale);
+			vel = Vec2D::VectorAdd(vel, b[vectorDraggingIndex].pos);
+
+			//reverse process to get newVel
+			Vec2D newVel = b[vectorDraggingIndex].velDrawArrowEnd;
+			Vec2D pos = b[vectorDraggingIndex].pos;
+			pos.scale(-1);
+			newVel = Vec2D::VectorAdd(newVel, pos);
+
+			newVel.scale(1 / vectorScale);
+			newVel.y *= -1;
+
+			//change vel
+			b[vectorDraggingIndex].vel = newVel;
+			
+			vectorDraggingIndex = -1;
+		}
+	}
+
+	void ConvertScreentoWorld(Vec2D &v) {
+		v = Vec2D((v.x - worldCenter.x) / zoomFactor, (v.y - worldCenter.y) / zoomFactor);
+	}
+
+	void ConvertWorldtoScreen(Vec2D &v) {
+		v = Vec2D((v.x * zoomFactor) + worldCenter.x, (v.y * zoomFactor) + worldCenter.y);
 	}
 
 };
 
 int main()
 {
-	/*
-	Vec2D vec = Vec2D(100, 50);
-	std::cout << vec.mag() << "\n";
-
-	vec.clamp(1, 10);
-	std::cout << vec.x << " " << vec.y << " " << vec.mag();
-	*/
 	//while (1) {}
 
 	Graphics g;
@@ -674,21 +715,22 @@ int main()
 //LIGHT SOURCES
 
 //UI IDEAS
-//click and drag to pan around, shift and x to zoom
-//E + click to add planet at rest, clicking and holding to drag on planet to "throw" it, 
-//gives it an impulse, use momentum to resolve impulse
-//need way to give planet mass...maybe just a short click on a planet will add mass, so keep clicking on planet to increase mass
-//D+click deletes planet
+//click and drag to pan around, shift and x to zoom -Done
+//E + click to add planet at rest-done
+//need way to give planet mass...maybe just a short click on a planet will add mass, so keep clicking on planet to increase mass -done
+//D+click deletes planet - done
+
 //need UI so when you click on planet it gives its radius and mass and coordinates in world space, 
 //think more about scale of world, 
 //add UI Pause menu with above controls listed
 
-//space to pause simulation , but doesnt go to pause menu, allows freezing time
-
+//space to pause simulation , but doesnt go to pause menu, allows freezing time - done
 
 //SWITCH FROM DRAWING PIXEL CIRCLES TO DRAWING DECALS WITH DIFFERENT COLORS AND DIFFERENT SIZES FOR PLANETS AND STARS, WILL INCREASE PERFORMANCE SIGNIFICANTLY
 //DRAG VECTORS TO GIVE PLANETS INITIAL VELOCITY
-//INCREASE SIZE OF PLANETS THAT SWALLOW OTHER PLANETS
+//INCREASE SIZE OF PLANETS THAT SWALLOW OTHER PLANETS - done
+
+//click + c to toggle center to follow a specific body - done
 
 //lock cursor
 /*
@@ -702,3 +744,16 @@ RECT rect;
 
 		ClipCursor(&rect);
 */
+
+
+
+//KNOWN BUGS
+/*
+	OUTSTANDING
+	1. mouse input for clicking doesnt work correctly on track pads, need to dynamically figure out what left and right click are on the mouse
+	2. scale is not set properly, vel vectors look too big
+
+	FIXED
+	3. toggle planet cannot untoggle planet, only dragging can cancel a planet as toggled
+	2. zooming and panning messes up clicking vectors
+	*/
